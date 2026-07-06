@@ -15,6 +15,3 @@ Statische pagina, geen build-stap nodig — werkt direct via GitHub Pages.
    nog bezig, dan gaat de klok in de volgende fase verder met de resterende tijd.
 7. Na de derde fase (Uitbeelden) verschijnt de eindstand.
 
-## Hosten via GitHub Pages
-
-Instellingen → Pages → "Deploy from a branch" → branch `main`, map `/ (root)`.
