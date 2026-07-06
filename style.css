@@ -198,6 +198,23 @@ button.primary:disabled {
   font-weight: 700;
 }
 
+.undo-btn {
+  background: #444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: clamp(0.85rem, 2vw, 1.1rem);
+  font-weight: 700;
+}
+
+.key-hints {
+  flex: 1 1 100%;
+  text-align: center;
+  color: #888;
+  font-size: clamp(0.7rem, 1.8vw, 0.9rem);
+}
+
 .panels {
   flex: 1 1 auto;
   display: flex;

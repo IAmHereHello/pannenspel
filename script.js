@@ -17,6 +17,7 @@
 
   let state = loadState();
   let timerHandle = null;
+  let undoSnapshot = null;
 
   function loadState() {
     try {
@@ -98,6 +99,7 @@
     state.turnStartScore = 0;
     state.turnEndReason = null;
     state.screen = 'game';
+    undoSnapshot = null;
     saveState();
     render();
   }
@@ -109,6 +111,7 @@
     state.timeLeft = TURN_SECONDS;
     state.turnStatus = 'idle';
     state.screen = 'setup';
+    undoSnapshot = null;
     saveState();
     render();
   }
@@ -157,12 +160,9 @@
 
   function handleMainClick() {
     if (state.screen !== 'game' || state.teams.length === 0) return;
-    const team = state.teams[state.currentTeamIdx];
     if (state.turnStatus === 'idle') {
       state.turnStatus = 'running';
       startTimer();
-    } else if (state.turnStatus === 'running') {
-      team.score += 1;
     } else if (state.turnStatus === 'time-up') {
       state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
       state.timeLeft = TURN_SECONDS;
@@ -192,8 +192,39 @@
     render();
   }
 
-  function handleSpacebar() {
+  function handleAddPoint() {
+    if (state.screen !== 'game' || state.turnStatus !== 'running') return;
+    state.teams[state.currentTeamIdx].score += 1;
+    saveState();
+    render();
+  }
+
+  function captureUndoSnapshot() {
+    undoSnapshot = JSON.parse(JSON.stringify({
+      screen: state.screen,
+      teams: state.teams,
+      phaseIdx: state.phaseIdx,
+      currentTeamIdx: state.currentTeamIdx,
+      timeLeft: state.timeLeft,
+      turnStatus: state.turnStatus,
+      turnStartScore: state.turnStartScore,
+      turnEndReason: state.turnEndReason,
+    }));
+  }
+
+  function undoEndRound() {
+    if (!undoSnapshot) return;
+    Object.assign(state, undoSnapshot);
+    undoSnapshot = null;
+    stopTimer();
+    if (state.turnStatus === 'running') startTimer();
+    saveState();
+    render();
+  }
+
+  function handleEndRound() {
     if (state.screen !== 'game') return;
+    captureUndoSnapshot();
     const wasRunning = state.turnStatus === 'running';
     const carriedTime = wasRunning ? state.timeLeft : TURN_SECONDS;
     stopTimer();
@@ -210,10 +241,17 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.code !== 'Space') return;
     if (state.screen !== 'game') return;
-    e.preventDefault();
-    handleSpacebar();
+    if (e.code === 'Space') {
+      e.preventDefault();
+      handleAddPoint();
+    } else if (e.code === 'Enter') {
+      e.preventDefault();
+      handleEndRound();
+    } else if (e.code === 'Backspace') {
+      e.preventDefault();
+      handleFoul();
+    }
   });
 
   function formatTime(sec) {
@@ -271,12 +309,15 @@
       </div>
     `).join('');
 
+    const undoBtnHtml = undoSnapshot ? '<button id="undo-btn" class="undo-btn">&#8630; Ongedaan maken</button>' : '';
+
     let overlay = '';
     if (state.turnStatus === 'idle') {
       overlay = `
         <div class="overlay" id="click-catcher">
           <div class="overlay-team" style="color:${team.color}">${escapeHtml(team.name)}</div>
           <div class="overlay-msg">Tik om te starten (${formatTime(state.timeLeft)})</div>
+          ${undoBtnHtml}
         </div>`;
     } else if (state.turnStatus === 'time-up') {
       const reasonMsg = state.turnEndReason === 'foul' ? '&#10060; FOUT! Woord gezegd' : '&#9200; TIJD OM!';
@@ -286,6 +327,7 @@
           <div class="overlay-team" style="color:${team.color}">${escapeHtml(team.name)}</div>
           <div class="overlay-msg">+${roundPoints} punten deze beurt</div>
           <div class="overlay-msg small">Volgende: ${escapeHtml(nextTeam.name)} &mdash; tik om door te gaan</div>
+          ${undoBtnHtml}
         </div>`;
     }
 
@@ -293,8 +335,10 @@
       <div class="game-screen">
         <div class="topbar">
           <div class="phase">Fase ${state.phaseIdx + 1}/${PHASES.length}: ${PHASES[state.phaseIdx]}</div>
+          ${state.turnStatus === 'running' ? undoBtnHtml : ''}
           ${state.turnStatus === 'running' ? '<button id="foul-btn" class="foul-btn">&#10060; Fout (stop beurt)</button>' : ''}
           <div class="timer ${state.turnStatus === 'running' && state.timeLeft <= 10 ? 'warning' : ''}">${formatTime(state.timeLeft)}</div>
+          <div class="key-hints">Spatie = punt &middot; Backspace = fout &middot; Enter = volgende fase</div>
         </div>
         <div class="panels" id="panels-container">${panels}</div>
         ${overlay}
@@ -319,6 +363,7 @@
       <div class="final-screen">
         <h1>Eindstand</h1>
         <div class="final-list">${rows}</div>
+        ${undoSnapshot ? '<button id="undo-btn" class="undo-btn">&#8630; Ongedaan maken</button>' : ''}
         <button id="new-game-btn" class="primary">Nieuw spel</button>
       </div>
     `;
@@ -353,6 +398,8 @@
       if (catcher) catcher.addEventListener('click', handleMainClick);
       const foulBtn = document.getElementById('foul-btn');
       if (foulBtn) foulBtn.addEventListener('click', (e) => { e.stopPropagation(); handleFoul(); });
+      const undoBtn = document.getElementById('undo-btn');
+      if (undoBtn) undoBtn.addEventListener('click', (e) => { e.stopPropagation(); undoEndRound(); });
       document.querySelectorAll('[data-adjust]').forEach((btn) =>
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -360,6 +407,8 @@
         }));
     } else if (state.screen === 'final') {
       document.getElementById('new-game-btn').addEventListener('click', newGame);
+      const undoBtn = document.getElementById('undo-btn');
+      if (undoBtn) undoBtn.addEventListener('click', undoEndRound);
     }
   }
 
